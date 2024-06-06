@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Draggable Puzzle Piece</title>
+  <style>
+    .puzzle-piece {
+      width: 100px;
+      height: 100px;
+      background: yellow;
+      clip-path: path('M10,10 h80 q10,-10 20,0 t20,0 v40 q-10,10 0,20 t0,20 h-40 q-10,10 -20,0 t-20,0 v-40 q10,-10 0,-20 t0,-20 z M70,50 a10,10 0 1,1 -20,0 a10,10 0 1,1 20,0 z');
+      -webkit-clip-path: path('M10,10 h80 q10,-10 20,0 t20,0 v40 q-10,10 0,20 t0,20 h-40 q-10,10 -20,0 t-20,0 v-40 q10,-10 0,-20 t0,-20 z M70,50 a10,10 0 1,1 -20,0 a10,10 0 1,1 20,0 z');
+      position: absolute;
+      cursor: move;
+    }
+    .target-box {
+      width: 150px;
+      height: 150px;
+      border: 2px dashed black;
+      position: absolute;
+      top: 200px;
+      left: 200px;
+    }
+  </style>
+</head>
+<body>
+  <div class="puzzle-piece" id="puzzle-piece"></div>
+  <div class="target-box" id="target-box"></div>
+  <script>
+    const puzzlePiece = document.getElementById('puzzle-piece');
+    const targetBox = document.getElementById('target-box');
+    let offsetX, offsetY;
+
+    function onMouseDown(e) {
+      const rect = puzzlePiece.getBoundingClientRect();
+      offsetX = e.clientX - rect.left;
+      offsetY = e.clientY - rect.top;
+
+      document.addEventListener('mousemove', onMouseMove);
+      document.addEventListener('mouseup', onMouseUp);
+    }
+
+    function onMouseMove(e) {
+      puzzlePiece.style.left = `${e.clientX - offsetX}px`;
+      puzzlePiece.style.top = `${e.clientY - offsetY}px`;
+    }
+
+    function onMouseUp() {
+      document.removeEventListener('mousemove', onMouseMove);
+      document.removeEventListener('mouseup', onMouseUp);
+
+      if (isNearTarget(puzzlePiece, targetBox)) {
+        const overlapRatio = calculateOverlap(puzzlePiece, targetBox);
+        if (overlapRatio >= 0.7) {
+          centerInTarget(puzzlePiece, targetBox);
+        }
+      }
+    }
+
+    function isNearTarget(element, target) {
+      const rect1 = element.getBoundingClientRect();
+      const rect2 = target.getBoundingClientRect();
+
+      const isInHorizontalBound = rect1.right > rect2.left && rect1.left < rect2.right;
+      const isInVerticalBound = rect1.bottom > rect2.top && rect1.top < rect2.bottom;
+
+      return isInHorizontalBound && isInVerticalBound;
+    }
+
+    function calculateOverlap(element, target) {
+      const rect1 = element.getBoundingClientRect();
+      const rect2 = target.getBoundingClientRect();
+
+      const overlapWidth = Math.min(rect1.right, rect2.right) - Math.max(rect1.left, rect2.left);
+      const overlapHeight = Math.min(rect1.bottom, rect2.bottom) - Math.max(rect1.top, rect2.top);
+
+      if (overlapWidth <= 0 || overlapHeight <= 0) {
+        return 0;
+      }
+
+      const overlapArea = overlapWidth * overlapHeight;
+      const elementArea = rect1.width * rect1.height;
+
+      return overlapArea / elementArea;
+    }
+
+    function centerInTarget(element, target) {
+      const targetRect = target.getBoundingClientRect();
+      const elementRect = element.getBoundingClientRect();
+
+      const targetCenterX = targetRect.left + targetRect.width / 2;
+      const targetCenterY = targetRect.top + targetRect.height / 2;
+
+      const elementCenterX = elementRect.width / 2;
+      const elementCenterY = elementRect.height / 2;
+
+      element.style.left = `${targetCenterX - elementCenterX}px`;
+      element.style.top = `${targetCenterY - elementCenterY}px`;
+    }
+
+    puzzlePiece.addEventListener('mousedown', onMouseDown);
+  </script>
+</body>
+</html>

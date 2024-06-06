@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Draggable Puzzle</title>
+  <style>
+    .puzzle-piece {
+      border: 1px solid black;
+      position: absolute;
+      cursor: move;
+    }
+    .target-box {
+      width: 200px;
+      height: 200px;
+      border: 2px dashed black;
+      position: relative;
+      margin-top: 220px;
+    }
+  </style>
+</head>
+<body>
+  <input type="file" id="upload" accept="image/*">
+  <div id="puzzle-container">
+    <canvas id="piece1" class="puzzle-piece"></canvas>
+    <canvas id="piece2" class="puzzle-piece"></canvas>
+    <canvas id="piece3" class="puzzle-piece"></canvas>
+    <canvas id="piece4" class="puzzle-piece"></canvas>
+  </div>
+  <div id="target-box" class="target-box"></div>
+  <script>
+    document.getElementById('upload').addEventListener('change', handleImage, false);
+
+    function handleImage(e) {
+      const reader = new FileReader();
+      reader.onload = function(event) {
+        const img = new Image();
+        img.onload = function() {
+          const canvasSize = 200; // Adjust the size of each canvas piece
+          const pieces = [
+            document.getElementById('piece1').getContext('2d'),
+            document.getElementById('piece2').getContext('2d'),
+            document.getElementById('piece3').getContext('2d'),
+            document.getElementById('piece4').getContext('2d'),
+          ];
+
+          const pieceSize = Math.min(img.width, img.height) / 2;
+
+          pieces.forEach((ctx, index) => {
+            ctx.canvas.width = canvasSize;
+            ctx.canvas.height = canvasSize;
+          });
+
+          // Top-left piece
+          pieces[0].drawImage(img, 0, 0, pieceSize, pieceSize, 0, 0, canvasSize, canvasSize);
+          // Top-right piece
+          pieces[1].drawImage(img, pieceSize, 0, pieceSize, pieceSize, 0, 0, canvasSize, canvasSize);
+          // Bottom-left piece
+          pieces[2].drawImage(img, 0, pieceSize, pieceSize, pieceSize, 0, 0, canvasSize, canvasSize);
+          // Bottom-right piece
+          pieces[3].drawImage(img, pieceSize, pieceSize, pieceSize, pieceSize, 0, 0, canvasSize, canvasSize);
+          
+          addDragAndDrop();
+        }
+        img.src = event.target.result;
+      }
+      reader.readAsDataURL(e.target.files[0]);
+    }
+
+    function addDragAndDrop() {
+      const puzzlePieces = document.querySelectorAll('.puzzle-piece');
+      const targetBox = document.getElementById('target-box');
+      let offsetX, offsetY;
+
+      puzzlePieces.forEach(piece => {
+        piece.addEventListener('mousedown', onMouseDown);
+      });
+
+      function onMouseDown(e) {
+        const piece = e.target;
+        const rect = piece.getBoundingClientRect();
+        offsetX = e.clientX - rect.left;
+        offsetY = e.clientY - rect.top;
+
+        document.addEventListener('mousemove', onMouseMove);
+        document.addEventListener('mouseup', onMouseUp);
+
+        function onMouseMove(e) {
+          piece.style.left = `${e.clientX - offsetX}px`;
+          piece.style.top = `${e.clientY - offsetY}px`;
+        }
+
+        function onMouseUp() {
+          document.removeEventListener('mousemove', onMouseMove);
+          document.removeEventListener('mouseup', onMouseUp);
+
+          if (isNearTarget(piece, targetBox)) {
+            const overlapRatio = calculateOverlap(piece, targetBox);
+            if (overlapRatio >= 0.7) {
+              centerInTarget(piece, targetBox);
+            }
+          }
+        }
+      }
+
+      function isNearTarget(element, target) {
+        const rect1 = element.getBoundingClientRect();
+        const rect2 = target.getBoundingClientRect();
+
+        const isInHorizontalBound = rect1.right > rect2.left && rect1.left < rect2.right;
+        const isInVerticalBound = rect1.bottom > rect2.top && rect1.top < rect2.bottom;
+
+        return isInHorizontalBound && isInVerticalBound;
+      }
+
+      function calculateOverlap(element, target) {
+        const rect1 = element.getBoundingClientRect();
+        const rect2 = target.getBoundingClientRect();
+
+        const overlapWidth = Math.min(rect1.right, rect2.right) - Math.max(rect1.left, rect2.left);
+        const overlapHeight = Math.min(rect1.bottom, rect2.bottom) - Math.max(rect1.top, rect2.top);
+
+        if (overlapWidth <= 0 || overlapHeight <= 0) {
+          return 0;
+        }
+
+        const overlapArea = overlapWidth * overlapHeight;
+        const elementArea = rect1.width * rect1.height;
+
+        return overlapArea / elementArea;
+      }
+
+      function centerInTarget(element, target) {
+        const targetRect = target.getBoundingClientRect();
+        const elementRect = element.getBoundingClientRect();
+
+        const targetCenterX = targetRect.left + targetRect.width / 2;
+        const targetCenterY = targetRect.top + targetRect.height / 2;
+
+        const elementCenterX = elementRect.width / 2;
+        const elementCenterY = elementRect.height / 2;
+
+        element.style.left = `${targetCenterX - elementCenterX}px`;
+        element.style.top = `${targetCenterY - elementCenterY}px`;
+      }
+    }
+  </script>
+</body>
+</html>
