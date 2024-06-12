@@ -166,8 +166,8 @@
       let offsetX, offsetY, selectedPiece;
 
       puzzlePieces.forEach(piece => {
-        piece.addEventListener('mousedown', onMouseDown);
-        // piece.addEventListener('pointerdown', onMouseDown);
+        // piece.addEventListener('mousedown', onMouseDown);
+        piece.addEventListener('pointerdown', onMouseDown);
       });
 
       function onMouseDown(e) {
@@ -179,10 +179,10 @@
         offsetX = e.clientX - rect.left;
         offsetY = e.clientY - rect.top;
 
-        document.addEventListener('mousemove', onMouseMove);
-        document.addEventListener('mouseup', onMouseUp);
-        // document.addEventListener('pointermove', onMouseMove);
-        // document.addEventListener('pointerup', onMouseUp);
+        // document.addEventListener('mousemove', onMouseMove);
+        // document.addEventListener('mouseup', onMouseUp);
+        document.addEventListener('pointermove', onMouseMove);
+        document.addEventListener('pointerup', onMouseUp);
       }
 
       function onMouseMove(e) {
@@ -202,10 +202,10 @@
 
       function onMouseUp() {
         if (!selectedPiece) return;
-        document.removeEventListener('mousemove', onMouseMove);
-        document.removeEventListener('mouseup', onMouseUp);
-        // document.removeEventListener('pointermove', onMouseMove);
-        // document.removeEventListener('pointerup', onMouseUp);
+        // document.removeEventListener('mousemove', onMouseMove);
+        // document.removeEventListener('mouseup', onMouseUp);
+        document.removeEventListener('pointermove', onMouseMove);
+        document.removeEventListener('pointerup', onMouseUp);
 
         targetBoxes.forEach(target => {
           const targetId = parseInt(target.id.replace('target', ''));
@@ -218,8 +218,8 @@
               selectedPiece.dataset.locked = 'true'; // 鎖定拼圖塊
               selectedPiece.style.zIndex = '-1'; // 設置z-index為較低值
               selectedPiece.classList.add('locked'); // 添加鎖定樣式
-              selectedPiece.removeEventListener('mousedown', onMouseDown); // 移除事件監聽器以防止進一步移動
-              // selectedPiece.removeEventListener('pointerdown', onMouseDown); // 移除事件監聽器以防止進一步移動
+              // selectedPiece.removeEventListener('mousedown', onMouseDown); // 移除事件監聽器以防止進一步移動
+              selectedPiece.removeEventListener('pointerdown', onMouseDown); // 移除事件監聽器以防止進一步移動
 
               // 廣播拼圖塊鎖定事件
               socket.emit('lockPiece', {
@@ -300,8 +300,8 @@
             piece.style.transform = 'translate(-50%, -50%)';
             piece.dataset.locked = 'true';
             piece.classList.add('locked');
-            piece.removeEventListener('mousedown', onMouseDown);
-            // piece.removeEventListener('pointerdown', onMouseDown);
+            // piece.removeEventListener('mousedown', onMouseDown);
+            piece.removeEventListener('pointerdown', onMouseDown);
           }
         }
       });
