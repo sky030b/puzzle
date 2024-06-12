@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>互鎖拼圖塊</title>
+    <style>
+        .puzzle-container {
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+        }
+
+        .puzzle-piece {
+            width: 150px;
+            height: 150px;
+            position: relative;
+            background-color: blue;
+        }
+
+        .puzzle-piece-1 {
+            clip-path: polygon(
+                0% 0%, 75% 0%, 75% 20%, 85% 20%, 85% 0%, 100% 0%, 100% 100%, 85% 100%, 
+                85% 80%, 75% 80%, 75% 100%, 0% 100%
+            );
+        }
+
+        .puzzle-piece-2 {
+            clip-path: polygon(
+                25% 0%, 100% 0%, 100% 100%, 25% 100%, 25% 80%, 15% 80%, 15% 100%, 0% 100%, 
+                0% 0%, 15% 0%, 15% 20%, 25% 20%
+            );
+            background-color: red;
+        }
+    </style>
+</head>
+<body>
+    <div class="puzzle-container">
+        <div class="puzzle-piece puzzle-piece-1"></div>
+        <div class="puzzle-piece puzzle-piece-2"></div>
+    </div>
+
+    <script>
+
+      const data = [{
+        roomId: "roomId",
+        ownerId: "someoneId",
+        isPublic: false || true,
+        img: "img url",
+        piecesBy: {row: number, col: number},
+        lockedPieces: [{pieceId:1, lockBy: {playerId: "someoneId", representColor: "a color code"}, lockWhen: 'timestamp'},...],
+      }]
+    </script>
+</body>
+</html>

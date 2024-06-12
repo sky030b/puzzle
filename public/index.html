@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Draggable Puzzle</title>
+  <style>
+    .puzzle-piece {
+      border: 1px solid black;
+      cursor: move;
+      overflow: hidden;
+      background-size: 400px 400px;
+      width: 100px;
+      height: 100px;
+      position: absolute; /* 確保拼圖塊能夠自由移動 */
+    }
+    .locked {
+      cursor: default; /* 鎖定後游標變成默認樣式 */
+    }
+    .target-box {
+      width: 100px;
+      height: 100px;
+      border: 2px dashed black;
+      position: relative;
+      float: left; /* 保持目標框浮動 */
+    }
+    #target-container {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 0px; /* Remove gap between grid items */
+      width: 400px; /* Adjust width to fit 4 boxes without gap */
+      position: relative;
+      margin-bottom: 20px;
+    }
+    #puzzle-container {
+      display: flex;
+      overflow-x: scroll;
+      width: 800px; /* 增加寬度 */
+      height: 100px;
+      white-space: nowrap;
+      border: 1px solid black;
+      margin-left: auto;
+      margin-right: auto;
+    }
+    #puzzle-row {
+      display: flex;
+      width: fit-content;
+    }
+    body {
+      position: relative;
+      margin: 0;
+      padding: 0;
+      height: 100vh;
+      overflow: hidden;
+    }
+  </style>
+</head>
+<body>
+  <input type="file" id="upload" accept="image/*">
+  <div id="target-container"></div>
+  <div id="puzzle-container">
+    <div id="puzzle-row"></div>
+  </div>
+  
+  <!-- 引入 Socket.io 客戶端庫 -->
+  <script src="/socket.io/socket.io.js"></script>
+  <script>
+    document.getElementById('upload').addEventListener('change', handleImage, false);
+
+    const socket = io();
+
+    function handleImage(e) {
+      const reader = new FileReader();
+      reader.onload = function(event) {
+        const img = new Image();
+        img.onload = function() {
+          const canvasSize = 100; // 調整每個拼圖塊的大小
+          const pieceCount = 16; // 拼圖塊數量（此示例為4x4網格）
+          const pieces = [];
+
+          for (let i = 0; i < pieceCount; i++) {
+            const piece = document.createElement('div');
+            piece.id = 'piece' + (i + 1);
+            piece.className = 'puzzle-piece';
+            piece.style.backgroundImage = `url(${img.src})`;
+
+            const row = Math.floor(i / 4);
+            const col = i % 4;
+            piece.style.backgroundPosition = `-${col * canvasSize}px -${row * canvasSize}px`;
+            pieces.push(piece);
+          }
+
+          // 打亂拼圖片段的順序
+          shuffleArray(pieces);
+
+          const puzzleRow = document.getElementById('puzzle-row');
+          puzzleRow.innerHTML = ''; // 清除之前的拼圖塊
+
+          pieces.forEach(piece => {
+            puzzleRow.appendChild(piece);
+          });
+
+          createTargetBoxes(pieceCount);
+          addDragAndDrop();
+        }
+        img.src = event.target.result;
+      }
+      reader.readAsDataURL(e.target.files[0]);
+    }
+
+    // Fisher-Yates 洗牌演算法
+    function shuffleArray(array) {
+      for (let i = array.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [array[i], array[j]] = [array[j], array[i]];
+      }
+    }
+
+    function createTargetBoxes(pieceCount) {
+      const targetContainer = document.getElementById('target-container');
+      targetContainer.innerHTML = ''; // 清除之前的目標框
+
+      for (let i = 0; i < pieceCount; i++) {
+        const targetBox = document.createElement('div');
+        targetBox.id = 'target' + (i + 1);
+        targetBox.className = 'target-box';
+        targetContainer.appendChild(targetBox);
+      }
+    }
+
+    function addDragAndDrop() {
+      const puzzlePieces = document.querySelectorAll('.puzzle-piece');
+      const targetBoxes = document.querySelectorAll('.target-box');
+      let offsetX, offsetY, selectedPiece;
+
+      puzzlePieces.forEach(piece => {
+        piece.addEventListener('mousedown', onMouseDown);
+      });
+
+      function onMouseDown(e) {
+        if (e.target.dataset.locked === 'true') return; // 如果拼圖塊被鎖定，則不做任何操作
+        selectedPiece = e.target;
+        selectedPiece.style.zIndex = '10';
+        const rect = selectedPiece.getBoundingClientRect();
+        offsetX = e.clientX - rect.left;
+        offsetY = e.clientY - rect.top;
+
+        document.addEventListener('mousemove', onMouseMove);
+        document.addEventListener('mouseup', onMouseUp);
+      }
+
+      function onMouseMove(e) {
+        if (!selectedPiece) return;
+        selectedPiece.style.left = `${e.clientX - offsetX}px`;
+        selectedPiece.style.top = `${e.clientY - offsetY}px`;
+
+        // 廣播拼圖塊移動事件
+        socket.emit('movePiece', {
+          id: selectedPiece.id,
+          left: selectedPiece.style.left,
+          top: selectedPiece.style.top
+        });
+      }
+
+      function onMouseUp() {
+        if (!selectedPiece) return;
+        document.removeEventListener('mousemove', onMouseMove);
+        document.removeEventListener('mouseup', onMouseUp);
+
+        targetBoxes.forEach(target => {
+          if (isNearTarget(selectedPiece, target) && selectedPiece.id === 'piece' + target.id.replace('target', '')) {
+            const overlapRatio = calculateOverlap(selectedPiece, target);
+            if (overlapRatio >= 0.5) {
+              centerInTarget(selectedPiece, target);
+              selectedPiece.dataset.locked = 'true'; // 鎖定拼圖塊
+              selectedPiece.style.zIndex = '1'; // 設置z-index為較低值
+              selectedPiece.classList.add('locked'); // 添加鎖定樣式
+              selectedPiece.removeEventListener('mousedown', onMouseDown); // 移除事件監聽器以防止進一步移動
+
+              // 廣播拼圖塊鎖定事件
+              socket.emit('lockPiece', {
+                id: selectedPiece.id,
+                left: selectedPiece.style.left,
+                top: selectedPiece.style.top,
+                zIndex: selectedPiece.style.zIndex
+              });
+            }
+          }
+        });
+
+        selectedPiece = null;
+      }
+
+      function isNearTarget(element, target) {
+        const rect1 = element.getBoundingClientRect();
+        const rect2 = target.getBoundingClientRect();
+
+        const isInHorizontalBound = rect1.left < rect2.right && rect1.right > rect2.left;
+        const isInVerticalBound = rect1.top < rect2.bottom && rect1.bottom > rect2.top;
+
+        return isInHorizontalBound && isInVerticalBound;
+      }
+
+      function calculateOverlap(element, target) {
+        const rect1 = element.getBoundingClientRect();
+        const rect2 = target.getBoundingClientRect();
+
+        const overlapWidth = Math.min(rect1.right, rect2.right) - Math.max(rect1.left, rect2.left);
+        const overlapHeight = Math.min(rect1.bottom, rect2.bottom) - Math.max(rect1.top, rect2.top);
+
+        if (overlapWidth <= 0 || overlapHeight <= 0) {
+          return 0;
+        }
+
+        const overlapArea = overlapWidth * overlapHeight;
+        const elementArea = rect1.width * rect1.height;
+
+        return overlapArea / elementArea;
+      }
+
+      function centerInTarget(element, target) {
+        const targetRect = target.getBoundingClientRect();
+        const elementRect = element.getBoundingClientRect();
+
+        const targetCenterX = targetRect.left + targetRect.width / 2;
+        const targetCenterY = targetRect.top + targetRect.height / 2;
+
+        const elementCenterX = elementRect.width / 2;
+        const elementCenterY = elementRect.height / 2;
+
+        element.style.left = `${targetCenterX - elementCenterX + window.scrollX}px`;
+        element.style.top = `${targetCenterY - elementCenterY + window.scrollY}px`;
+      }
+
+      // 監聽伺服器廣播的拼圖塊移動事件
+      socket.on('movePiece', (data) => {
+        const piece = document.getElementById(data.id);
+        if (piece) {
+          piece.style.left = data.left;
+          piece.style.top = data.top;
+        }
+      });
+
+      // 監聽伺服器廣播的拼圖塊鎖定事件
+      socket.on('lockPiece', (data) => {
+        const piece = document.getElementById(data.id);
+        if (piece) {
+          piece.style.left = data.left;
+          piece.style.top = data.top;
+          piece.style.zIndex = data.zIndex; // 同步 z-index
+          piece.dataset.locked = 'true';
+          piece.classList.add('locked'); // 同步鎖定樣式
+          piece.removeEventListener('mousedown', onMouseDown);
+        }
+      });
+    }
+  </script>
+</body>
+</html>

@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Draggable Puzzle</title>
+  <style>
+    .puzzle-piece {
+      border: 1px solid black;
+      position: absolute;
+      cursor: move;
+      overflow: hidden;
+      background-size: 400px 400px;
+    }
+
+    .locked {
+      cursor: default;
+      /* 鎖定後游標變成默認樣式 */
+    }
+
+    .target-box {
+      width: 100px;
+      height: 100px;
+      border: 2px dashed black;
+      position: relative;
+    }
+
+    #target-container {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 0px;
+      /* Remove gap between grid items */
+      width: 400px;
+      /* Adjust width to fit 4 boxes without gap */
+      position: relative;
+    }
+
+    #puzzle-container {
+      position: relative;
+      display: flex;
+      flex-wrap: wrap;
+      width: 600px;
+      height: 200px;
+    }
+  </style>
+</head>
+
+<body>
+  <input type="text" id="room-input" placeholder="Enter room name">
+  <button id="join-room">Join Room</button>
+  <input type="file" id="upload" accept="image/*">
+  <div id="target-container" style="margin-right: auto; margin-left: auto;"></div>
+  <div id="puzzle-container" style="width: 100%;"></div>
+  <!-- 引入 Socket.io 客戶端庫 -->
+  <script src="/socket.io/socket.io.js"></script>
+  <script>
+    const socket = io();
+    let currentRoom = '';
+
+    document.getElementById('join-room').addEventListener('click', joinRoom);
+    document.getElementById('upload').addEventListener('change', handleImage, false);
+
+    function joinRoom() {
+      const roomInput = document.getElementById('room-input');
+      const roomName = roomInput.value.trim();
+      if (roomName) {
+        socket.emit('joinRoom', roomName);
+        currentRoom = roomName;
+        roomInput.disabled = true;
+        document.getElementById('join-room').disabled = true;
+      }
+    }
+
+    function handleImage(e) {
+      const reader = new FileReader();
+      reader.onload = function (event) {
+        const img = new Image();
+        img.onload = function () {
+          const canvasSize = 100; // 調整每個拼圖塊的大小
+          const pieceCount = 16; // 拼圖塊數量（此示例為4x4網格）
+          const pieces = [];
+
+          const puzzleContainer = document.getElementById('puzzle-container');
+          puzzleContainer.innerHTML = ''; // 清除之前的拼圖塊
+
+          for (let i = 0; i < pieceCount; i++) {
+            const piece = document.createElement('div');
+            piece.id = 'piece' + (i + 1);
+            piece.className = 'puzzle-piece';
+            piece.style.width = `${canvasSize}px`;
+            piece.style.height = `${canvasSize}px`;
+            piece.style.backgroundImage = `url(${img.src})`;
+            piece.style.left = `${Math.random() * (puzzleContainer.clientWidth - canvasSize)}px`;
+            // piece.style.top = `${Math.random() * (puzzleContainer.clientHeight - canvasSize)}px`;
+            piece.style.top = `${(puzzleContainer.clientHeight - canvasSize)}px`;
+
+            const row = Math.floor(i / 4);
+            const col = i % 4;
+            piece.style.backgroundPosition = `-${col * canvasSize}px -${row * canvasSize}px`;
+            puzzleContainer.appendChild(piece);
+            pieces.push(piece);
+          }
+
+          createTargetBoxes(pieceCount);
+          addDragAndDrop();
+        }
+        img.src = event.target.result;
+      }
+      reader.readAsDataURL(e.target.files[0]);
+    }
+
+    function createTargetBoxes(pieceCount) {
+      const targetContainer = document.getElementById('target-container');
+      targetContainer.innerHTML = ''; // 清除之前的目標框
+
+      for (let i = 0; i < pieceCount; i++) {
+        const targetBox = document.createElement('div');
+        targetBox.id = 'target' + (i + 1);
+        targetBox.className = 'target-box';
+        targetContainer.appendChild(targetBox);
+      }
+    }
+
+    function addDragAndDrop() {
+      const puzzlePieces = document.querySelectorAll('.puzzle-piece');
+      const targetBoxes = document.querySelectorAll('.target-box');
+      let offsetX, offsetY, selectedPiece;
+
+      puzzlePieces.forEach(piece => {
+        piece.addEventListener('mousedown', onMouseDown);
+      });
+
+      function onMouseDown(e) {
+        if (e.target.dataset.locked === 'true') return; // 如果拼圖塊被鎖定，則不做任何操作
+        selectedPiece = e.target;
+        selectedPiece.style.zIndex = '10';
+        const rect = selectedPiece.getBoundingClientRect();
+        const parentRect = selectedPiece.parentNode.getBoundingClientRect();
+        offsetX = e.clientX - rect.left;
+        offsetY = e.clientY - rect.top;
+
+        document.addEventListener('mousemove', onMouseMove);
+        document.addEventListener('mouseup', onMouseUp);
+      }
+
+      function onMouseMove(e) {
+        if (!selectedPiece) return;
+        const parentRect = selectedPiece.parentNode.getBoundingClientRect();
+        selectedPiece.style.left = `${e.clientX - offsetX - parentRect.left}px`;
+        selectedPiece.style.top = `${e.clientY - offsetY - parentRect.top}px`;
+
+        // 廣播拼圖塊移動事件
+        socket.emit('movePiece', {
+          room: currentRoom,
+          id: selectedPiece.id,
+          left: selectedPiece.style.left,
+          top: selectedPiece.style.top
+        });
+      }
+
+      function onMouseUp() {
+        if (!selectedPiece) return;
+        document.removeEventListener('mousemove', onMouseMove);
+        document.removeEventListener('mouseup', onMouseUp);
+
+        targetBoxes.forEach(target => {
+          if (isNearTarget(selectedPiece, target) && selectedPiece.id === 'piece' + target.id.replace('target', '')) {
+            const overlapRatio = calculateOverlap(selectedPiece, target);
+            if (overlapRatio >= 0.7) {
+              centerInTarget(selectedPiece, target);
+              selectedPiece.dataset.locked = 'true'; // 鎖定拼圖塊
+              selectedPiece.style.zIndex = '-1'; // 設置z-index為較低值
+              selectedPiece.classList.add('locked'); // 添加鎖定樣式
+              selectedPiece.removeEventListener('mousedown', onMouseDown); // 移除事件監聽器以防止進一步移動
+
+              // 廣播拼圖塊鎖定事件
+              socket.emit('lockPiece', {
+                room: currentRoom,
+                id: selectedPiece.id,
+                left: selectedPiece.style.left,
+                top: selectedPiece.style.top,
+                zIndex: selectedPiece.style.zIndex
+              });
+            } else {
+              selectedPiece.style.zIndex = '5';
+            }
+          }
+        });
+        selectedPiece = null;
+      }
+
+      function isNearTarget(element, target) {
+        const rect1 = element.getBoundingClientRect();
+        const rect2 = target.getBoundingClientRect();
+
+        const isInHorizontalBound = rect1.left < rect2.right && rect1.right > rect2.left;
+        const isInVerticalBound = rect1.top < rect2.bottom && rect1.bottom > rect2.top;
+
+        return isInHorizontalBound && isInVerticalBound;
+      }
+
+      function calculateOverlap(element, target) {
+        const rect1 = element.getBoundingClientRect();
+        const rect2 = target.getBoundingClientRect();
+
+        const overlapWidth = Math.min(rect1.right, rect2.right) - Math.max(rect1.left, rect2.left);
+        const overlapHeight = Math.min(rect1.bottom, rect2.bottom) - Math.max(rect1.top, rect2.top);
+
+        if (overlapWidth <= 0 || overlapHeight <= 0) {
+          return 0;
+        }
+
+        const overlapArea = overlapWidth * overlapHeight;
+        const elementArea = rect1.width * rect1.height;
+
+        return overlapArea / elementArea;
+      }
+
+      function centerInTarget(element, target) {
+        const targetRect = target.getBoundingClientRect();
+        const parentRect = element.parentNode.getBoundingClientRect();
+        const elementRect = element.getBoundingClientRect();
+
+        const targetCenterX = targetRect.left + targetRect.width / 2 - parentRect.left;
+        const targetCenterY = targetRect.top + targetRect.height / 2 - parentRect.top;
+
+        const elementCenterX = elementRect.width / 2;
+        const elementCenterY = elementRect.height / 2;
+
+        element.style.left = `${targetCenterX - elementCenterX}px`;
+        element.style.top = `${targetCenterY - elementCenterY}px`;
+      }
+
+      // 監聽伺服器廣播的拼圖塊移動事件
+      socket.on('movePiece', (data) => {
+        if (data.room === currentRoom) {
+          const piece = document.getElementById(data.id);
+          if (piece) {
+            piece.style.left = data.left;
+            piece.style.top = data.top;
+          }
+        }
+      });
+
+      // 監聽伺服器廣播的拼圖塊鎖定事件
+      socket.on('lockPiece', (data) => {
+        if (data.room === currentRoom) {
+          const piece = document.getElementById(data.id);
+          if (piece) {
+            piece.style.left = data.left;
+            piece.style.top = data.top;
+            piece.style.zIndex = data.zIndex; // 同步 z-index
+            piece.dataset.locked = 'true';
+            piece.classList.add('locked'); // 同步鎖定樣式
+            piece.removeEventListener('mousedown', onMouseDown);
+          }
+        }
+      });
+    }
+  </script>
+</body>
+
+</html>
